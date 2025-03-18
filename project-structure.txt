@@ -1,0 +1,77 @@
+openmanus-redo/
+│
+├── main.py                  # Main entry point
+├── setup.py                 # Setup script for installation
+├── requirements.txt         # Python dependencies
+├── README.md                # Project documentation
+├── LICENSE                  # License file
+│
+├── app/                     # Original OpenManus app code (symlink or copied)
+│   ├── agent/
+│   ├── flow/
+│   └── logger.py
+│
+├── desktop/                 # Desktop application code
+│   ├── __init__.py
+│   │
+│   ├── components/          # UI components
+│   │   ├── __init__.py
+│   │   ├── command_center.py
+│   │   ├── flow_selector.py
+│   │   ├── main_window.py   
+│   │   ├── output_canvas.py
+│   │   └── sidebar.py
+│   │
+│   ├── controllers/         # Application controllers
+│   │   ├── __init__.py
+│   │   ├── agent_manager.py
+│   │   ├── session_manager.py
+│   │   └── task_controller.py
+│   │
+│   ├── models/              # Data models
+│   │   ├── __init__.py
+│   │   ├── prompt_model.py
+│   │   └── session_model.py
+│   │
+│   ├── theme/               # Styling and theming
+│   │   ├── __init__.py
+│   │   ├── icons/           # Application icons
+│   │   ├── style_manager.py
+│   │   └── themes/          # Theme definition files
+│   │
+│   ├── utils/               # Utility functions
+│   │   ├── __init__.py
+│   │   ├── config.py        # Configuration management
+│   │   ├── file_utils.py    # File operations
+│   │   └── log_utils.py     # Logging utilities
+│   │
+│   └── views/               # Additional UI views
+│       ├── __init__.py
+│       ├── dialogs/         # Dialog windows
+│       ├── settings_view.py
+│       └── welcome_view.py
+│
+├── assets/                  # Application assets
+│   ├── fonts/               # Custom fonts
+│   ├── images/              # Images and graphics
+│   │   └── logo.png
+│   └── splash.png           # Splash screen image
+│
+├── build/                   # Build output directory
+│   ├── windows/             # Windows build files
+│   ├── macos/               # macOS build files
+│   └── linux/               # Linux build files
+│
+├── dist/                    # Distribution packages
+│
+├── tests/                   # Test suite
+│   ├── __init__.py
+│   ├── test_components/
+│   ├── test_controllers/
+│   └── test_integration/
+│
+└── scripts/                 # Build and utility scripts
+    ├── build_windows.py
+    ├── build_macos.py
+    ├── build_linux.py
+    └── create_installer.py

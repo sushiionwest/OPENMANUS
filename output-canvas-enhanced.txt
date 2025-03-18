@@ -1,0 +1,868 @@
+# desktop/components/output_canvas.py
+from PyQt6.QtWidgets import (
+    QFrame, QVBoxLayout, QHBoxLayout, QLabel, QTextEdit, 
+    QPushButton, QTabWidget, QWidget, QScrollBar, QFileDialog,
+    QTableView, QSplitter, QToolButton, QMenu, QAction
+)
+from PyQt6.QtCore import Qt, QTimer, QStringListModel, QUrl
+from PyQt6.QtGui import (
+    QTextCharFormat, QFont, QSyntaxHighlighter, QColor,
+    QTextCursor, QTextBlockFormat, QTextDocument, QDesktopServices
+)
+import json
+import os
+
+class CodeHighlighter(QSyntaxHighlighter):
+    """
+    Syntax highlighter for code output with support for common languages.
+    """
+    
+    def __init__(self, document, theme_colors, language="python"):
+        super().__init__(document)
+        self.theme_colors = theme_colors
+        self.language = language.lower()
+        self.highlighting_rules = []
+        
+        # Define text formats for different syntax elements
+        self.init_formats()
+        
+        # Add highlighting rules based on language
+        self.add_highlighting_rules()
+    
+    def init_formats(self):
+        """Initialize the text formats for different syntax elements"""
+        # Normal text format
+        self.normal_format = QTextCharFormat()
+        self.normal_format.setForeground(QColor(self.theme_colors["text"]))
+        
+        # Keyword format
+        self.keyword_format = QTextCharFormat()
+        self.keyword_format.setForeground(QColor('#CC7832' if self.is_dark_theme() else '#0000FF'))
+        self.keyword_format.setFontWeight(QFont.Weight.Bold)
+        
+        # Class format
+        self.class_format = QTextCharFormat()
+        self.class_format.setForeground(QColor('#A9B7C6' if self.is_dark_theme() else '#008080'))
+        self.class_format.setFontWeight(QFont.Weight.Bold)
+        
+        # Function format
+        self.function_format = QTextCharFormat()
+        self.function_format.setForeground(QColor('#FFC66D' if self.is_dark_theme() else '#0000A0'))
+        
+        # String format
+        self.string_format = QTextCharFormat()
+        self.string_format.setForeground(QColor('#6A8759' if self.is_dark_theme() else '#008000'))
+        
+        # Comment format
+        self.comment_format = QTextCharFormat()
+        self.comment_format.setForeground(QColor('#808080'))
+        self.comment_format.setFontItalic(True)
+        
+        # Number format
+        self.number_format = QTextCharFormat()
+        self.number_format.setForeground(QColor('#6897BB' if self.is_dark_theme() else '#0000FF'))
+    
+    def is_dark_theme(self):
+        """Determine if using dark theme based on background color"""
+        bg_color = QColor(self.theme_colors["background"])
+        return bg_color.lightnessF() < 0.5
+    
+    def add_highlighting_rules(self):
+        """Add regex-based rules for syntax highlighting based on language"""
+        if self.language == "python":
+            self.add_python_rules()
+        elif self.language == "javascript" or self.language == "js":
+            self.add_javascript_rules()
+        elif self.language == "html":
+            self.add_html_rules()
+        elif self.language == "css":
+            self.add_css_rules()
+        elif self.language == "json":
+            self.add_json_rules()
+        else:
+            # Generic rules for other languages
+            self.add_generic_rules()
+    
+    def add_python_rules(self):
+        """Add syntax highlighting rules for Python"""
+        # Python keywords
+        keywords = [
+            "and", "as", "assert", "break", "class", "continue", "def", "del", "elif",
+            "else", "except", "False", "finally", "for", "from", "global", "if", "import",
+            "in", "is", "lambda", "None", "nonlocal", "not", "or", "pass", "raise", "return",
+            "True", "try", "while", "with", "yield"
+        ]
+        
+        for keyword in keywords:
+            pattern = QRegularExpression(r"\b" + keyword + r"\b")
+            self.highlighting_rules.append((pattern, self.keyword_format))
+        
+        # Python class names (including after class or def)
+        class_pattern = QRegularExpression(r"\bclass\s+([A-Za-z_][A-Za-z0-9_]*)")
+        self.highlighting_rules.append((class_pattern, self.class_format))
+        
+        # Python function names
+        function_pattern = QRegularExpression(r"\bdef\s+([A-Za-z_][A-Za-z0-9_]*)")
+        self.highlighting_rules.append((function_pattern, self.function_format))
+        
+        # Python function calls
+        function_call_pattern = QRegularExpression(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\(")
+        self.highlighting_rules.append((function_call_pattern, self.function_format))
+        
+        # Python strings (single quote)
+        string_pattern1 = QRegularExpression(r"'[^'\\]*(\\.[^'\\]*)*'")
+        self.highlighting_rules.append((string_pattern1, self.string_format))
+        
+        # Python strings (double quote)
+        string_pattern2 = QRegularExpression(r"\"[^\"\\]*(\\.[^\"\\]*)*\"")
+        self.highlighting_rules.append((string_pattern2, self.string_format))
+        
+        # Python comments
+        comment_pattern = QRegularExpression(r"#[^\n]*")
+        self.highlighting_rules.append((comment_pattern, self.comment_format))
+        
+        # Python numbers
+        number_pattern = QRegularExpression(r"\b\d+\b")
+        self.highlighting_rules.append((number_pattern, self.number_format))
+    
+    def add_javascript_rules(self):
+        """Add syntax highlighting rules for JavaScript"""
+        # JavaScript keywords
+        keywords = [
+            "break", "case", "catch", "class", "const", "continue", "debugger",
+            "default", "delete", "do", "else", "export", "extends", "false",
+            "finally", "for", "function", "if", "import", "in", "instanceof",
+            "new", "null", "return", "super", "switch", "this", "throw", "true",
+            "try", "typeof", "var", "void", "while", "with", "yield", "let", "await", "async"
+        ]
+        
+        for keyword in keywords:
+            pattern = QRegularExpression(r"\b" + keyword + r"\b")
+            self.highlighting_rules.append((pattern, self.keyword_format))
+        
+        # JavaScript function names
+        function_pattern = QRegularExpression(r"\bfunction\s+([A-Za-z_][A-Za-z0-9_]*)")
+        self.highlighting_rules.append((function_pattern, self.function_format))
+        
+        # JavaScript method names
+        method_pattern = QRegularExpression(r"\b([A-Za-z_][A-Za-z0-9_]*)\s*\(")
+        self.highlighting_rules.append((method_pattern, self.function_format))
+        
+        # JavaScript strings (single quote)
+        string_pattern1 = QRegularExpression(r"'[^'\\]*(\\.[^'\\]*)*'")
+        self.highlighting_rules.append((string_pattern1, self.string_format))
+        
+        # JavaScript strings (double quote)
+        string_pattern2 = QRegularExpression(r"\"[^\"\\]*(\\.[^\"\\]*)*\"")
+        self.highlighting_rules.append((string_pattern2, self.string_format))
+        
+        # JavaScript template strings
+        string_pattern3 = QRegularExpression(r"`[^`\\]*(\\.[^`\\]*)*`")
+        self.highlighting_rules.append((string_pattern3, self.string_format))
+        
+        # JavaScript comments (single line)
+        comment_pattern1 = QRegularExpression(r"//[^\n]*")
+        self.highlighting_rules.append((comment_pattern1, self.comment_format))
+        
+        # JavaScript numbers
+        number_pattern = QRegularExpression(r"\b\d+\b")
+        self.highlighting_rules.append((number_pattern, self.number_format))
+    
+    def add_html_rules(self):
+        """Add syntax highlighting rules for HTML"""
+        # HTML tags
+        tag_pattern = QRegularExpression(r"</?[a-zA-Z0-9]+(?:\s+[a-zA-Z0-9]+(?:=(?:\"[^\"]*\"|'[^']*'))?)*\s*/?>")
+        self.highlighting_rules.append((tag_pattern, self.keyword_format))
+        
+        # HTML attributes
+        attr_pattern = QRegularExpression(r"\s+[a-zA-Z0-9]+(?==)")
+        self.highlighting_rules.append((attr_pattern, self.function_format))
+        
+        # HTML attribute values
+        value_pattern1 = QRegularExpression(r"=\"[^\"]*\"")
+        self.highlighting_rules.append((value_pattern1, self.string_format))
+        
+        value_pattern2 = QRegularExpression(r"='[^']*'")
+        self.highlighting_rules.append((value_pattern2, self.string_format))
+        
+        # HTML comments
+        comment_pattern = QRegularExpression(r"<!--.*-->", QRegularExpression.PatternOption.DotMatchesEverythingOption)
+        self.highlighting_rules.append((comment_pattern, self.comment_format))
+    
+    def add_css_rules(self):
+        """Add syntax highlighting rules for CSS"""
+        # CSS selectors
+        selector_pattern = QRegularExpression(r"[.#]?[a-zA-Z0-9_-]+\s*(?:\[[^\]]*\])?(?:::?[a-zA-Z0-9_-]+)*\s*(?:,\s*[.#]?[a-zA-Z0-9_-]+\s*(?:\[[^\]]*\])?(?:::?[a-zA-Z0-9_-]+)*\s*)*\{")
+        self.highlighting_rules.append((selector_pattern, self.keyword_format))
+        
+        # CSS properties
+        property_pattern = QRegularExpression(r"[a-zA-Z0-9_-]+\s*:")
+        self.highlighting_rules.append((property_pattern, self.function_format))
+        
+        # CSS values
+        value_pattern = QRegularExpression(r":\s*[^;]+;")
+        self.highlighting_rules.append((value_pattern, self.normal_format))
+        
+        # CSS color values
+        color_pattern = QRegularExpression(r"#[0-9a-fA-F]{3,6}")
+        self.highlighting_rules.append((color_pattern, self.string_format))
+        
+        # CSS comments
+        comment_pattern = QRegularExpression(r"/\*.*\*/", QRegularExpression.PatternOption.DotMatchesEverythingOption)
+        self.highlighting_rules.append((comment_pattern, self.comment_format))
+    
+    def add_json_rules(self):
+        """Add syntax highlighting rules for JSON"""
+        # JSON property names
+        property_pattern = QRegularExpression(r"\"[^\"\\]*(\\.[^\"\\]*)*\"(?=\s*:)")
+        self.highlighting_rules.append((property_pattern, self.function_format))
+        
+        # JSON strings
+        string_pattern = QRegularExpression(r"\"[^\"\\]*(\\.[^\"\\]*)*\"")
+        self.highlighting_rules.append((string_pattern, self.string_format))
+        
+        # JSON numbers
+        number_pattern = QRegularExpression(r"\b\d+(\.\d+)?\b")
+        self.highlighting_rules.append((number_pattern, self.number_format))
+        
+        # JSON boolean and null values
+        keyword_pattern = QRegularExpression(r"\b(true|false|null)\b")
+        self.highlighting_rules.append((keyword_pattern, self.keyword_format))
+    
+    def add_generic_rules(self):
+        """Add generic syntax highlighting rules for unknown languages"""
+        # Generic keywords (common in many languages)
+        generic_keywords = [
+            "if", "else", "for", "while", "return", "function", "class",
+            "true", "false", "null", "var", "let", "const", "import", "export"
+        ]
+        
+        for keyword in generic_keywords:
+            pattern = QRegularExpression(r"\b" + keyword + r"\b")
+            self.highlighting_rules.append((pattern, self.keyword_format))
+        
+        # Generic strings (single quote)
+        string_pattern1 = QRegularExpression(r"'[^'\\]*(\\.[^'\\]*)*'")
+        self.highlighting_rules.append((string_pattern1, self.string_format))
+        
+        # Generic strings (double quote)
+        string_pattern2 = QRegularExpression(r"\"[^\"\\]*(\\.[^\"\\]*)*\"")
+        self.highlighting_rules.append((string_pattern2, self.string_format))
+        
+        # Generic comments (single line with // or #)
+        comment_pattern1 = QRegularExpression(r"(?://|#)[^\n]*")
+        self.highlighting_rules.append((comment_pattern1, self.comment_format))
+        
+        # Generic numbers
+        number_pattern = QRegularExpression(r"\b\d+(\.\d+)?\b")
+        self.highlighting_rules.append((number_pattern, self.number_format))
+    
+    def highlightBlock(self, text):
+        """Apply syntax highlighting to a block of text"""
+        # Apply regular rules
+        for pattern, format_type in self.highlighting_rules:
+            match_iterator = pattern.globalMatch(text)
+            while match_iterator.hasNext():
+                match = match_iterator.next()
+                self.setFormat(match.capturedStart(), match.capturedLength(), format_type)
+        
+        # Handle multi-line comments for JavaScript and CSS (/* */)
+        if self.language in ["javascript", "js", "css"]:
+            self.highlight_multiline_comments(text)
+    
+    def highlight_multiline_comments(self, text):
+        """Handle multi-line comments (simplified implementation)"""
+        # More robust implementation would track state between blocks
+        if "/*" in text and "*/" in text:
+            start = text.indexOf("/*")
+            end = text.indexOf("*/", start) + 2
+            if start <= end:
+                self.setFormat(start, end - start, self.comment_format)
+
+
+class OutputTextEdit(QTextEdit):
+    """
+    Enhanced text edit for displaying formatted output content
+    with support for code highlighting and interactions.
+    """
+    
+    def __init__(self, theme_manager, parent=None):
+        super().__init__(parent)
+        self.theme_manager = theme_manager
+        self.setObjectName("outputText")
+        self.setReadOnly(True)
+        
+        # Set monospace font
+        font = QFont("Consolas, Monaco, Courier New, monospace")
+        font.setStyleHint(QFont.StyleHint.Monospace)
+        self.setFont(font)
+        
+        # For syntax highlighting
+        self.highlighter = None
+        
+        # Connect to theme changes
+        self.theme_manager.theme_changed.connect(self.on_theme_changed)
+    
+    def on_theme_changed(self, theme_name):
+        """Update highlighter when theme changes"""
+        if self.highlighter:
+            language = getattr(self.highlighter, "language", "text")
+            self.highlighter.setDocument(None)  # Detach from document
+            self.highlighter = CodeHighlighter(self.document(), self.theme_manager.get_colors(), language)
+    
+    def set_content(self, content, language=None):
+        """Set content with optional syntax highlighting"""
+        self.setPlainText(content)
+        
+        # Apply syntax highlighting if language is specified
+        if language:
+            self.highlighter = CodeHighlighter(self.document(), self.theme_manager.get_colors(), language)
+    
+    def detect_language_from_content(self, content):
+        """Try to detect language from content (simplified)"""
+        content = content.lower()
+        
+        # Look for language indicators
+        if content.startswith("<!doctype html") or "<html" in content:
+            return "html"
+        elif "{" in content and ":" in content and ";" in content:
+            return "css"
+        elif "function" in content or "var " in content or "let " in content or "const " in content:
+            return "javascript"
+        elif "import " in content or "def " in content or "class " in content:
+            return "python"
+        elif content.strip().startswith("{") and content.strip().endswith("}"):
+            try:
+                json.loads(content)
+                return "json"
+            except:
+                pass
+        
+        return "text"  # Default
+    
+    def contextMenuEvent(self, event):
+        """Customize context menu to add copy with formatting options"""
+        menu = self.createStandardContextMenu()
+        
+        # Add separator
+        menu.addSeparator()
+        
+        # Add copy as HTML action
+        copy_html_action = QAction("Copy as HTML", self)
+        copy_html_action.triggered.connect(self.copy_as_html)
+        menu.addAction(copy_html_action)
+        
+        # Add copy as Markdown action
+        copy_md_action = QAction("Copy as Markdown", self)
+        copy_md_action.triggered.connect(self.copy_as_markdown)
+        menu.addAction(copy_md_action)
+        
+        # Show the menu
+        menu.exec(event.globalPos())
+    
+    def copy_as_html(self):
+        """Copy selected text as HTML with formatting"""
+        cursor = self.textCursor()
+        if cursor.hasSelection():
+            selected_html = cursor.selection().toHtml()
+            clipboard = QApplication.clipboard()
+            clipboard.setText(selected_html, QClipboard.Mode.Html)
+    
+    def copy_as_markdown(self):
+        """Copy selected text as Markdown (simplified)"""
+        cursor = self.textCursor()
+        if cursor.hasSelection():
+            selected_text = cursor.selectedText()
+            # Simple conversion - a full implementation would need to
+            # consider the formatting applied to the text
+            markdown_text = "```\n" + selected_text + "\n```"
+            clipboard = QApplication.clipboard()
+            clipboard.setText(markdown_text)
+
+
+class JsonTreeView(QTreeView):
+    """Tree view for displaying JSON data in a structured format"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("jsonTreeView")
+        self.setAlternatingRowColors(True)
+        self.setHeaderHidden(True)
+        
+        # Set up the model
+        self.model = QStandardItemModel()
+        self.setModel(self.model)
+    
+    def set_json_data(self, json_data):
+        """Parse and display JSON data in tree view"""
+        self.model.clear()
+        
+        # Parse JSON if string
+        if isinstance(json_data, str):
+            try:
+                data = json.loads(json_data)
+            except json.JSONDecodeError:
+                # If invalid JSON, show as text
+                self.model.appendRow(QStandardItem("Invalid JSON data"))
+                return
+        else:
+            data = json_data
+        
+        # Recursively build the tree
+        root_item = self.model.invisibleRootItem()
+        self.add_json_items(root_item, data)
+        
+        # Expand first level
+        self.expandToDepth(0)
+    
+    def add_json_items(self, parent_item, json_obj):
+        """Recursively add JSON items to the tree"""
+        if isinstance(json_obj, dict):
+            # Add dictionary items
+            for key, value in json_obj.items():
+                item = QStandardItem(str(key))
+                parent_item.appendRow(item)
+                
+                if isinstance(value, (dict, list)):
+                    # Recursively add nested structures
+                    self.add_json_items(item, value)
+                else:
+                    # Add leaf value
+                    value_item = QStandardItem(str(value))
+                    item.appendRow(value_item)
+        
+        elif isinstance(json_obj, list):
+            # Add list items
+            for i, value in enumerate(json_obj):
+                item = QStandardItem(f"[{i}]")
+                parent_item.appendRow(item)
+                
+                if isinstance(value, (dict, list)):
+                    # Recursively add nested structures
+                    self.add_json_items(item, value)
+                else:
+                    # Add leaf value
+                    value_item = QStandardItem(str(value))
+                    item.appendRow(value_item)
+        else:
+            # Add simple value
+            parent_item.appendRow(QStandardItem(str(json_obj)))
+
+
+class OutputCanvas(QFrame):
+    """
+    Enhanced output display area with support for different output formats
+    including text, code, data, and visualizations.
+    """
+    
+    def __init__(self, task_controller, theme_manager, parent=None):
+        super().__init__(parent)
+        self.task_controller = task_controller
+        self.theme_manager = theme_manager
+        
+        self.setObjectName("outputCanvas")
+        self.setFrameShape(QFrame.Shape.StyledPanel)
+        
+        # Create layout
+        self.layout = QVBoxLayout(self)
+        self.layout.setContentsMargins(20, 20, 20, 20)
+        self.layout.setSpacing(15)
+        
+        # Create header with tools
+        self.create_header()
+        
+        # Create output tabs
+        self.create_output_tabs()
+        
+        # Connect signals from task controller
+        self.task_controller.output_received.connect(self.process_output)
+        self.task_controller.progress_received.connect(self.append_progress)
+        self.task_controller.status_changed.connect(self.update_status)
+        
+        # Auto-scroll timer
+        self.scroll_timer = QTimer(self)
+        self.scroll_timer.timeout.connect(self.auto_scroll)
+        self.scrolling_active = False
+    
+    def create_header(self):
+        """Create header with title and tools"""
+        # Header container
+        header_container = QWidget()
+        header_layout = QHBoxLayout(header_container)
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Title
+        self.header = QLabel("Output")
+        self.header.setObjectName("sectionHeader")
+        header_layout.addWidget(self.header)
+        
+        # Status indicator
+        header_layout.addStretch(1)
+        
+        self.status_indicator = QLabel("Ready")
+        self.status_indicator.setObjectName("statusIndicator")
+        header_layout.addWidget(self.status_indicator)
+        
+        # Export button
+        self.export_button = QPushButton("Export")
+        self.export_button.setObjectName("toolButton")
+        self.export_button.clicked.connect(self.export_output)
+        header_layout.addWidget(self.export_button)
+        
+        # Clear button
+        self.clear_button = QPushButton("Clear")
+        self.clear_button.setObjectName("toolButton")
+        self.clear_button.clicked.connect(self.clear_output)
+        header_layout.addWidget(self.clear_button)
+        
+        self.layout.addWidget(header_container)
+    
+    def create_output_tabs(self):
+        """Create tab widget for different output views"""
+        self.tabs = QTabWidget()
+        self.tabs.setObjectName("outputTabs")
+        
+        # Text tab
+        self.text_tab = QWidget()
+        self.text_layout = QVBoxLayout(self.text_tab)
+        self.text_output = OutputTextEdit(self.theme_manager)
+        self.text_layout.addWidget(self.text_output)
+        self.tabs.addTab(self.text_tab, "Text")
+        
+        # Code tab
+        self.code_tab = QWidget()
+        self.code_layout = QVBoxLayout(self.code_tab)
+        
+        # Code header with language selector
+        code_header = QWidget()
+        code_header_layout = QHBoxLayout(code_header)
+        code_header_layout.setContentsMargins(0, 0, 0, 8)
+        
+        language_label = QLabel("Language:")
+        code_header_layout.addWidget(language_label)
+        
+        self.language_selector = QComboBox()
+        self.language_selector.addItems(["auto", "python", "javascript", "html", "css", "json"])
+        self.language_selector.currentTextChanged.connect(self.on_language_changed)
+        code_header_layout.addWidget(self.language_selector)
+        
+        code_header_layout.addStretch(1)
+        self.code_layout.addWidget(code_header)
+        
+        # Code output
+        self.code_output = OutputTextEdit(self.theme_manager)
+        self.code_layout.addWidget(self.code_output)
+        self.tabs.addTab(self.code_tab, "Code")
+        
+        # Data tab
+        self.data_tab = QWidget()
+        self.data_layout = QVBoxLayout(self.data_tab)
+        
+        # Data view options
+        data_options = QWidget()
+        data_options_layout = QHBoxLayout(data_options)
+        data_options_layout.setContentsMargins(0, 0, 0, 8)
+        
+        view_label = QLabel("View:")
+        data_options_layout.addWidget(view_label)
+        
+        self.data_view_selector = QComboBox()
+        self.data_view_selector.addItems(["Tree", "Table", "Raw"])
+        self.data_view_selector.currentTextChanged.connect(self.switch_data_view)
+        data_options_layout.addWidget(self.data_view_selector)
+        
+        data_options_layout.addStretch(1)
+        self.data_layout.addWidget(data_options)
+        
+        # Data view stack
+        self.data_stack = QStackedWidget()
+        
+        # Tree view for JSON
+        self.json_tree = JsonTreeView()
+        self.data_stack.addWidget(self.json_tree)
+        
+        # Table view for tabular data
+        self.table_view = QTableView()
+        self.data_stack.addWidget(self.table_view)
+        
+        # Raw text view for data
+        self.raw_data_view = OutputTextEdit(self.theme_manager)
+        self.data_stack.addWidget(self.raw_data_view)
+        
+        self.data_layout.addWidget(self.data_stack, 1)
+        self.tabs.addTab(self.data_tab, "Data")
+        
+        # Visual tab
+        self.visual_tab = QWidget()
+        self.visual_layout = QVBoxLayout(self.visual_tab)
+        
+        # Placeholder for visualization
+        self.visual_placeholder = QLabel("Visualization will appear here")
+        self.visual_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.visual_layout.addWidget(self.visual_placeholder)
+        
+        self.tabs.addTab(self.visual_tab, "Visual")
+        
+        self.layout.addWidget(self.tabs, stretch=1)
+    
+    def process_output(self, output):
+        """Process and display output content with format detection"""
+        # Clear previous output
+        self.clear_output(silent=True)
+        
+        # Set text output
+        self.text_output.setPlainText(output)
+        
+        # Try to detect if this is code
+        if "```" in output or output.strip().startswith("def ") or output.strip().startswith("class "):
+            # Extract code blocks if present
+            code_blocks = self.extract_code_blocks(output)
+            if code_blocks:
+                # Display first code block in code tab
+                code, language = code_blocks[0]
+                self.code_output.set_content(code, language)
+                
+                # Switch to code tab
+                self.tabs.setCurrentIndex(1)
+                return
+            else:
+                # No code blocks but might still be code
+                language = self.code_output.detect_language_from_content(output)
+                self.code_output.set_content(output, language)
+        
+        # Try to detect if this is JSON data
+        try:
+            json_data = json.loads(output)
+            # Set JSON tree view
+            self.json_tree.set_json_data(json_data)
+            # Set raw data view
+            self.raw_data_view.setPlainText(json.dumps(json_data, indent=2))
+            # Switch to data tab
+            self.tabs.setCurrentIndex(2)
+            return
+        except json.JSONDecodeError:
+            pass
+        
+        # Default to text tab
+        self.tabs.setCurrentIndex(0)
+    
+    def extract_code_blocks(self, text):
+        """Extract code blocks from markdown-style text"""
+        code_blocks = []
+        lines = text.split("\n")
+        in_code_block = False
+        current_block = []
+        current_language = ""
+        
+        for line in lines:
+            if line.strip().startswith("```"):
+                if in_code_block:
+                    # End of code block
+                    code_blocks.append((("\n".join(current_block)), current_language))
+                    current_block = []
+                    current_language = ""
+                    in_code_block = False
+                else:
+                    # Start of code block
+                    in_code_block = True
+                    # Check for language specification
+                    language_spec = line.strip().replace("```", "").strip()
+                    if language_spec:
+                        current_language = language_spec
+            elif in_code_block:
+                current_block.append(line)
+        
+        # Handle case where code block wasn't closed
+        if in_code_block and current_block:
+            code_blocks.append((("\n".join(current_block)), current_language))
+        
+        return code_blocks
+    
+    def append_progress(self, text):
+        """Append progress text to the output area"""
+        self.text_output.append(text)
+        self.start_auto_scroll()
+    
+    def update_status(self, status):
+        """Update the status indicator"""
+        self.status_indicator.setText(status)
+        
+        # Add visual styling based on status
+        if status == "Processing...":
+            self.status_indicator.setObjectName("statusProcessing")
+        elif status == "Completed":
+            self.status_indicator.setObjectName("statusSuccess")
+        elif status == "Error":
+            self.status_indicator.setObjectName("statusError")
+        elif status == "Cancelled":
+            self.status_indicator.setObjectName("statusWarning")
+        else:
+            self.status_indicator.setObjectName("statusIndicator")
+        
+        # Force style update
+        self.status_indicator.style().unpolish(self.status_indicator)
+        self.status_indicator.style().polish(self.status_indicator)
+    
+    def clear_output(self, silent=False):
+        """Clear all output areas"""
+        self.text_output.clear()
+        self.code_output.clear()
+        self.raw_data_view.clear()
+        self.json_tree.model.clear()
+        
+        if not silent:
+            self.update_status("Ready")
+    
+    def export_output(self):
+        """Export the output to a file"""
+        current_tab = self.tabs.currentIndex()
+        
+        if current_tab == 0:  # Text tab
+            self.export_text()
+        elif current_tab == 1:  # Code tab
+            self.export_code()
+        elif current_tab == 2:  # Data tab
+            self.export_data()
+        elif current_tab == 3:  # Visual tab
+            self.export_visual()
+    
+    def export_text(self):
+        """Export text output to a file"""
+        content = self.text_output.toPlainText()
+        if not content:
+            return
+        
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export Text",
+            os.path.expanduser("~/output.txt"),
+            "Text Files (*.txt);;All Files (*)"
+        )
+        
+        if file_path:
+            try:
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write(content)
+            except Exception as e:
+                QMessageBox.warning(self, "Export Error", f"Failed to export: {str(e)}")
+    
+    def export_code(self):
+        """Export code output to a file"""
+        content = self.code_output.toPlainText()
+        if not content:
+            return
+        
+        language = self.language_selector.currentText()
+        extension = self.get_extension_for_language(language)
+        
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export Code",
+            os.path.expanduser(f"~/output{extension}"),
+            f"Code Files (*{extension});;All Files (*)"
+        )
+        
+        if file_path:
+            try:
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write(content)
+            except Exception as e:
+                QMessageBox.warning(self, "Export Error", f"Failed to export: {str(e)}")
+    
+    def export_data(self):
+        """Export data output to a file"""
+        # Get the current data view
+        current_view = self.data_view_selector.currentText()
+        
+        if current_view == "Raw":
+            content = self.raw_data_view.toPlainText()
+        else:
+            # Try to get JSON data
+            try:
+                # Just use the raw text and parse it
+                content = self.raw_data_view.toPlainText()
+                json_data = json.loads(content)
+                content = json.dumps(json_data, indent=2)
+            except:
+                QMessageBox.warning(self, "Export Error", "Failed to parse data for export")
+                return
+        
+        if not content:
+            return
+        
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export Data",
+            os.path.expanduser("~/output.json"),
+            "JSON Files (*.json);;All Files (*)"
+        )
+        
+        if file_path:
+            try:
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write(content)
+            except Exception as e:
+                QMessageBox.warning(self, "Export Error", f"Failed to export: {str(e)}")
+    
+    def export_visual(self):
+        """Export visualization to a file"""
+        # Placeholder - actual implementation would depend on visualization type
+        QMessageBox.information(self, "Export Visual", "Visualization export not implemented yet")
+    
+    def get_extension_for_language(self, language):
+        """Get the appropriate file extension for a language"""
+        extensions = {
+            "python": ".py",
+            "javascript": ".js",
+            "html": ".html",
+            "css": ".css",
+            "json": ".json"
+        }
+        return extensions.get(language, ".txt")
+    
+    def on_language_changed(self, language):
+        """Handle language selection change for code highlighting"""
+        content = self.code_output.toPlainText()
+        if content:
+            # Use "auto" detection if selected
+            if language == "auto":
+                language = self.code_output.detect_language_from_content(content)
+            
+            # Apply highlighting
+            self.code_output.set_content(content, language)
+    
+    def switch_data_view(self, view_type):
+        """Switch between different data view types"""
+        if view_type == "Tree":
+            self.data_stack.setCurrentIndex(0)
+        elif view_type == "Table":
+            self.data_stack.setCurrentIndex(1)
+        elif view_type == "Raw":
+            self.data_stack.setCurrentIndex(2)
+    
+    def start_auto_scroll(self):
+        """Start auto-scrolling to follow output"""
+        if not self.scrolling_active:
+            self.scrolling_active = True
+            self.scroll_timer.start(100)  # Check every 100ms
+    
+    def auto_scroll(self):
+        """Auto-scroll the text output to the bottom"""
+        scrollbar = self.text_output.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
+        
+        # Stop scrolling after 1 second of no new content
+        self.scroll_timer.stop()
+        QTimer.singleShot(1000, self.stop_scrolling)
+    
+    def stop_scrolling(self):
+        """Stop the auto-scroll behavior"""
+        self.scrolling_active = False
+
+
+# Missing imports for the code to work correctly
+from PyQt6.QtWidgets import (
+    QStackedWidget, QStandardItemModel, QStandardItem, QTreeView,
+    QApplication, QClipboard, QPainter
+)
+from PyQt6.QtGui import QRegularExpression

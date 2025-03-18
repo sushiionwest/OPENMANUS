@@ -1,0 +1,198 @@
+# desktop/components/sidebar.py
+from PyQt6.QtWidgets import (
+    QWidget, QVBoxLayout, QLabel, QPushButton, 
+    QHBoxLayout, QButtonGroup, QSizePolicy
+)
+from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QIcon, QPixmap
+from PyQt6.QtSvg import QSvgRenderer
+
+class SidebarButton(QPushButton):
+    """Custom button for sidebar navigation with icon support"""
+    
+    def __init__(self, text, icon_path=None, parent=None):
+        super().__init__(text, parent)
+        self.setObjectName("sidebarButton")
+        self.setCheckable(True)
+        self.setMinimumHeight(40)
+        
+        # Create layout for proper icon and text alignment
+        self.layout = QHBoxLayout(self)
+        self.layout.setContentsMargins(12, 6, 12, 6)
+        self.layout.setSpacing(12)
+        
+        # Add icon if provided
+        if icon_path:
+            self.icon_label = QLabel()
+            self.icon_label.setFixedSize(18, 18)
+            
+            # Support both SVG and regular images
+            if icon_path.endswith('.svg'):
+                self.set_svg_icon(icon_path)
+            else:
+                self.set_pixmap_icon(icon_path)
+                
+            self.layout.addWidget(self.icon_label)
+        
+        # Add text label
+        self.text_label = QLabel(text)
+        self.text_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        self.layout.addWidget(self.text_label)
+        
+        # Add indicator for selected state
+        self.indicator = QWidget()
+        self.indicator.setFixedSize(4, 20)
+        self.indicator.setObjectName("sidebarButtonIndicator")
+        self.indicator.setVisible(False)
+        
+        # Right-align the indicator by adding a stretch
+        self.layout.addStretch(1)
+        self.layout.addWidget(self.indicator)
+        
+        # Apply styling
+        self.update_style()
+    
+    def set_svg_icon(self, icon_path):
+        """Set an SVG icon for the button"""
+        renderer = QSvgRenderer(icon_path)
+        pixmap = QPixmap(18, 18)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        renderer.render(painter)
+        painter.end()
+        self.icon_label.setPixmap(pixmap)
+    
+    def set_pixmap_icon(self, icon_path):
+        """Set a regular pixmap icon for the button"""
+        pixmap = QPixmap(icon_path)
+        self.icon_label.setPixmap(pixmap.scaled(18, 18, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+    
+    def update_style(self):
+        """Update the button's appearance based on state"""
+        is_checked = self.isChecked()
+        self.indicator.setVisible(is_checked)
+    
+    def setChecked(self, checked):
+        """Override to update appearance when checked state changes"""
+        super().setChecked(checked)
+        self.update_style()
+
+
+class Sidebar(QWidget):
+    """
+    Enhanced sidebar navigation component with icons and selection states
+    """
+    
+    # Signal emitted when navigation changes
+    navigation_changed = pyqtSignal(str)
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("sidebar")
+        self.setFixedWidth(220)
+        
+        # Create layout
+        self.layout = QVBoxLayout(self)
+        self.layout.setContentsMargins(10, 20, 10, 20)
+        self.layout.setSpacing(8)
+        
+        # Add logo
+        self.create_logo()
+        
+        # Spacer after logo
+        self.layout.addSpacing(20)
+        
+        # Create button group to manage selection
+        self.button_group = QButtonGroup(self)
+        self.button_group.setExclusive(True)
+        self.button_group.buttonClicked.connect(self.on_navigation_clicked)
+        
+        # Add navigation buttons
+        self.nav_buttons = {}
+        self.create_nav_buttons()
+        
+        # Add stretch to push settings to bottom
+        self.layout.addStretch(1)
+        
+        # Add settings button
+        self.create_settings_button()
+    
+    def create_logo(self):
+        """Create the logo section at the top of sidebar"""
+        logo_container = QWidget()
+        logo_layout = QHBoxLayout(logo_container)
+        logo_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Try to load logo image if available
+        logo_image = QLabel()
+        logo_image.setFixedSize(32, 32)
+        
+        try:
+            logo_pixmap = QPixmap("assets/images/logo.png")
+            logo_image.setPixmap(logo_pixmap.scaled(
+                32, 32, 
+                Qt.AspectRatioMode.KeepAspectRatio, 
+                Qt.TransformationMode.SmoothTransformation
+            ))
+        except:
+            # Fallback to a colored circle
+            logo_image.setStyleSheet("background-color: #4a76f5; border-radius: 16px;")
+        
+        logo_layout.addWidget(logo_image)
+        
+        # Add logo text
+        logo_text = QLabel("OpenManus")
+        logo_text.setObjectName("sidebarLogo")
+        logo_text.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        logo_layout.addWidget(logo_text)
+        
+        self.layout.addWidget(logo_container)
+    
+    def create_nav_buttons(self):
+        """Create navigation buttons with icons"""
+        # Define the navigation items with icons
+        nav_items = [
+            {"name": "Home", "icon": "assets/icons/home.svg"},
+            {"name": "Sessions", "icon": "assets/icons/sessions.svg"},
+            {"name": "Templates", "icon": "assets/icons/templates.svg"},
+            {"name": "Plugins", "icon": "assets/icons/plugins.svg"},
+            {"name": "Help", "icon": "assets/icons/help.svg"}
+        ]
+        
+        # Create buttons for each navigation item
+        for item in nav_items:
+            button = SidebarButton(item["name"], item["icon"])
+            self.layout.addWidget(button)
+            self.button_group.addButton(button)
+            self.nav_buttons[item["name"]] = button
+        
+        # Set Home as default selected
+        if "Home" in self.nav_buttons:
+            self.nav_buttons["Home"].setChecked(True)
+    
+    def create_settings_button(self):
+        """Create the settings button at the bottom of sidebar"""
+        settings_button = SidebarButton("Settings", "assets/icons/settings.svg")
+        self.layout.addWidget(settings_button)
+        
+        # Connect settings button to special handling
+        settings_button.clicked.connect(self.on_settings_clicked)
+    
+    def on_navigation_clicked(self, button):
+        """Handle navigation button clicks"""
+        # Get the button text
+        button_text = button.text()
+        
+        # Emit the navigation changed signal
+        self.navigation_changed.emit(button_text)
+    
+    def on_settings_clicked(self):
+        """Handle settings button click"""
+        # This would open settings dialog or navigate to settings page
+        self.navigation_changed.emit("Settings")
+    
+    def select_navigation(self, name):
+        """Programmatically select a navigation item"""
+        if name in self.nav_buttons:
+            self.nav_buttons[name].setChecked(True)
+            self.navigation_changed.emit(name)
